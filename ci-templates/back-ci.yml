@@ -1,0 +1,22 @@
+# Template de referência do CI do Back_Iara (o arquivo ATIVO vive em Back_Iara/.github/workflows/ci.yml).
+# Mantido aqui para documentar a esteira dos 3 repos num só lugar.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm run test --if-present

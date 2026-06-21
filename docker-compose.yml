@@ -1,0 +1,39 @@
+# Infra local de desenvolvimento: Postgres (com pgvector) + Redis.
+# Subir:   docker compose up -d        (ou: npm run infra:up no Back_Iara via override)
+# Derrubar: docker compose down
+#
+# Estes dois serviços são as dependências de runtime do Back_Iara (API + worker).
+# DATABASE_URL no Back: postgresql://iara:iara@localhost:5433/iara?schema=public
+# REDIS_URL    no Back: redis://localhost:6379
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: iara-postgres
+    environment:
+      POSTGRES_USER: iara
+      POSTGRES_PASSWORD: iara
+      POSTGRES_DB: iara
+    ports:
+      # host:container — host 5433 evita conflito com outro Postgres em 5432.
+      - '5433:5432'
+    volumes:
+      - iara_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U iara']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: iara-redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  iara_pg:

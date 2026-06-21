@@ -1,0 +1,6 @@
+# Copie para terraform.tfvars e ajuste. terraform.tfvars está no .gitignore.
+region             = "us-east-1"
+env                = "dev"
+project            = "iara"
+db_master_username = "iara"
+domain_name        = ""

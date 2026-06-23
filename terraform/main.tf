@@ -1,13 +1,15 @@
 // ============================================================
-// IARA — scaffold serverless (espelha o painel de custos AWS).
+// IARA — IaC serverless (espelha o painel de custos AWS). `terraform validate` PASSA.
 //
-// NÃO É 100% DEPLOYÁVEL: handlers Lambda, ASLs de Step Functions, certificados ACM e
-// algumas policies estão como PLACEHOLDER (marcados com TODO). Serve para mapear a
-// arquitetura, custos e dependências, e como ponto de partida do IaC real.
+// ESTADO: IAM (logs/SQS/Secrets/S3), CloudWatch log groups, Secrets Manager, ECR e o
+// env das Lambdas já estão definidos (ver support.tf). A única lacuna inerente ao IaC é o
+// BUNDLE de código: as Lambdas usam um placeholder zip — o CI do Back_Iara substitui por
+// `filename`/`image_uri` reais no deploy. Ainda como TODO opcional: ACM/aliases do
+// CloudFront (domínio) e a ASL real das Tasks do Step Functions.
 //
 // Recursos (5 camadas → infra): geração de conteúdo (Step Functions + Lambda + SQS),
 // agente/cron (EventBridge), API (API Gateway + Lambda), dados (Aurora Serverless v2 +
-// pgvector), mídia (S3 + CloudFront), auth (Cognito).
+// pgvector), mídia (S3 + CloudFront), auth (Cognito), config (Secrets Manager), imagens (ECR).
 // ============================================================
 
 locals {
@@ -152,6 +154,18 @@ resource "aws_lambda_function" "api" {
   filename      = data.archive_file.placeholder.output_path
   timeout       = 30
   memory_size   = 512
+
+  environment {
+    variables = {
+      NODE_ENV       = var.env == "prod" ? "production" : "development"
+      QUEUE_URL      = aws_sqs_queue.jobs.url
+      S3_BUCKET      = aws_s3_bucket.media.id
+      MEDIA_CDN      = aws_cloudfront_distribution.media.domain_name
+      APP_SECRET_ARN = aws_secretsmanager_secret.app.arn
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.api, aws_iam_role_policy_attachment.lambda_basic]
 }
 
 resource "aws_lambda_function" "worker" {
@@ -162,6 +176,17 @@ resource "aws_lambda_function" "worker" {
   filename      = data.archive_file.placeholder.output_path
   timeout       = 300
   memory_size   = 1024
+
+  environment {
+    variables = {
+      NODE_ENV       = var.env == "prod" ? "production" : "development"
+      QUEUE_URL      = aws_sqs_queue.jobs.url
+      S3_BUCKET      = aws_s3_bucket.media.id
+      APP_SECRET_ARN = aws_secretsmanager_secret.app.arn
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.worker, aws_iam_role_policy_attachment.lambda_basic]
 }
 
 resource "aws_lambda_event_source_mapping" "worker_sqs" {

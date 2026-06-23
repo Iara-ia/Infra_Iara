@@ -29,3 +29,7 @@ Thumbs.db
 
 # misc
 *.log
+
+# deploy bootstrap
+deploy/.env.prod
+.env.prod

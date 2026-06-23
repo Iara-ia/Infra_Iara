@@ -1,0 +1,87 @@
+# IARA — deploy BOOTSTRAP (1 host barato roda tudo). NÃO é o serverless de escala.
+#
+# Pré-requisito: clonar os 3 repos como pastas IRMÃS:
+#   .../iara/Back_Iara   .../iara/Front-Iara   .../iara/Infra_Iara
+# e preencher deploy/.env.prod (copie de deploy/.env.prod.example).
+#
+# Subir:
+#   cd Infra_Iara
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#
+# Upgrade pro SaaS (depois): trocar para a infra serverless (terraform/) — mesmo código.
+
+name: iara-bootstrap
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - iara_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - iara_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: iara-back:bootstrap
+    build:
+      context: ../../Back_Iara
+    restart: unless-stopped
+    command: sh -c "npx prisma migrate deploy && node dist/src/api/main.js"
+    env_file:
+      - .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '3333:3333'
+
+  worker:
+    image: iara-back:bootstrap
+    build:
+      context: ../../Back_Iara
+    restart: unless-stopped
+    command: ['node', 'dist/src/worker/main.js']
+    env_file:
+      - .env.prod
+    depends_on:
+      api:
+        condition: service_started
+
+  front:
+    image: iara-front:bootstrap
+    build:
+      context: ../../Front-Iara
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_DEV_USER_ID: ${NEXT_PUBLIC_DEV_USER_ID}
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    depends_on:
+      - api
+    ports:
+      - '3000:3000'
+
+volumes:
+  iara_pgdata: {}
+  iara_redis: {}
